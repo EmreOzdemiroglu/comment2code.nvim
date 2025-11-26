@@ -137,20 +137,105 @@ When you press `<leader>ai` on the first comment, the plugin will:
 
 ### Activation Modes
 
-The plugin supports three activation modes:
+The plugin supports three activation modes that control when code generation is triggered:
 
-| Mode | Description |
-|------|-------------|
-| `manual` | Only triggers via `<leader>ai` keymap or `:Comment2Code` command |
-| `auto_linear` | Triggers the previous @ai: comment when you start writing a new one |
-| `auto_nonlinear` | Triggers when cursor moves away from the @ai: comment line (default) |
+#### `manual` Mode
 
-Change mode at runtime:
+Code generation **only** happens when you explicitly request it.
+
+**When to use:** You want full control over when AI calls are made. Useful for expensive API calls or when you want to review comments before generating.
+
+**How it works:**
+- Write your `@ai:` comment
+- Nothing happens automatically
+- Press `<leader>ai` or run `:Comment2Code` to generate
+
+```lua
+-- @ai: create a fibonacci function
+-- (cursor can be anywhere, nothing happens until you press <leader>ai)
+```
+
+#### `auto_linear` Mode
+
+Code generates when you **start writing a new `@ai:` comment** below an existing one.
+
+**When to use:** You're writing multiple sequential prompts and want a natural "finish one, start next" flow. Great for building up code incrementally.
+
+**How it works:**
+1. Write your first `@ai:` comment
+2. Move to a new line and start typing `@ai:` again
+3. The **previous** comment automatically triggers generation
+4. Continue writing your next prompt while the first generates
+
+```lua
+-- @ai: create a fibonacci function
+-- ^ This triggers when you start typing below...
+
+-- @ai: now create a factorial function
+-- ^ ...here. And THIS triggers when you start the next one.
+```
+
+**Flow example:**
+```
+1. Write: -- @ai: create helper function
+2. Press Enter, go to new line
+3. Start typing: -- @ai: create main function
+4. → First comment triggers! Code appears above while you keep typing.
+5. Finish second comment, start third...
+6. → Second comment triggers!
+```
+
+#### `auto_nonlinear` Mode (Default)
+
+Code generates when your **cursor moves away** from the comment line.
+
+**When to use:** You want automatic generation but with a chance to edit your prompt before it fires. Best for exploratory coding where you jump around the file.
+
+**How it works:**
+1. Write your `@ai:` comment
+2. Move cursor to a different line (or wait for debounce timeout)
+3. Code generates automatically
+
+```lua
+-- @ai: create a fibonacci function
+-- ^ Write this, then move cursor elsewhere
+
+-- Code appears here automatically after you leave the line
+```
+
+**Debounce behavior:**
+- A 500ms (configurable) debounce prevents triggering while you're still editing
+- If you stay on the line, generation won't fire until you leave
+- Moving to any other line (up, down, or jumping) triggers generation
+
+#### Mode Comparison
+
+| Aspect | `manual` | `auto_linear` | `auto_nonlinear` |
+|--------|----------|---------------|------------------|
+| Trigger | Keymap/command only | Start new `@ai:` comment | Leave comment line |
+| API calls | Most controlled | On-demand | Most automatic |
+| Best for | Careful workflows | Sequential prompting | Exploratory coding |
+| Interruption | None | Minimal | Can be surprising |
+
+#### Changing Modes
+
+At runtime:
 ```vim
 :Comment2CodeMode manual
 :Comment2CodeMode auto_linear
 :Comment2CodeMode auto_nonlinear
 ```
+
+Check current mode:
+```vim
+:Comment2CodeMode
+```
+
+In your config:
+```lua
+require("comment2code").setup({
+  mode = "manual",  -- or "auto_linear" or "auto_nonlinear"
+})
 
 ## Configuration
 
