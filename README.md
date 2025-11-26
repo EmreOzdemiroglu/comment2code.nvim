@@ -8,8 +8,9 @@ Write a comment, get code. Powered by [OpenCode](https://github.com/sst/opencode
 
 Move your cursor away, and the code appears below. That's it.
 
-Inspired by [ThePrimeagen's](https://github.com/theprimeagen) workflow.
-
+Inspired by [ThePrimeagen's](https://github.com/theprimeagen) workflow. 
+https://x.com/ThePrimeagen/status/1993354816655954366?s=20
+ 
 ## Requirements
 
 - Neovim 0.10+
@@ -120,7 +121,7 @@ Switch modes anytime:
 require("comment2code").setup({
   enabled = true,
   opencode_path = "opencode",
-  model = "anthropic/claude-sonnet-4-20250514",
+  model = "opencode/big-pickle",
   trigger_pattern = "@ai:",
   mode = "auto_nonlinear",
   debounce_ms = 500,
