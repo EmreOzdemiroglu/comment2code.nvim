@@ -127,41 +127,87 @@ function M.has_code_below(bufnr, start_line, max_lines)
   return false, nil
 end
 
----Get the comment prefix for the current filetype
----@param filetype string
----@return string
-function M.get_comment_prefix(filetype)
-  local prefixes = {
-    lua = "--",
-    python = "#",
-    javascript = "//",
-    typescript = "//",
-    javascriptreact = "//",
-    typescriptreact = "//",
-    c = "//",
-    cpp = "//",
-    rust = "//",
-    go = "//",
-    java = "//",
-    kotlin = "//",
-    swift = "//",
-    ruby = "#",
-    php = "//",
-    sh = "#",
-    bash = "#",
-    zsh = "#",
-    vim = '"',
-    sql = "--",
-    haskell = "--",
-    elixir = "#",
-    r = "#",
-    julia = "#",
-    perl = "#",
-    yaml = "#",
-    toml = "#",
-  }
+---@class CodeRegion
+---@field start_line number 0-indexed start line (first line of code after comment)
+---@field end_line number 0-indexed end line (last line of code before next @ai: or EOF)
+---@field code string The code content
+---@field line_count number Number of lines in the region
+
+---Get the code region between an @ai: comment and the next @ai: comment or EOF
+---This is used for refactoring existing code
+---@param bufnr number
+---@param comment_line number 0-indexed line of the @ai: comment
+---@return CodeRegion? region, nil if no code found
+function M.get_code_region(bufnr, comment_line)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local filetype = vim.bo[bufnr].filetype
   
-  return prefixes[filetype] or "//"
+  -- Start looking from the line after the comment
+  local region_start = nil
+  local region_end = nil
+  
+  for i = comment_line + 1, line_count - 1 do
+    local lines = vim.api.nvim_buf_get_lines(bufnr, i, i + 1, false)
+    if #lines == 0 then
+      break
+    end
+    
+    local line = lines[1]
+    
+    -- Check if this line is another @ai: comment - stop here
+    local prompt = M.extract_prompt(line, filetype)
+    if prompt then
+      -- Found next @ai: comment, stop before it
+      break
+    end
+    
+    -- Check if line has non-whitespace content
+    if line:match("%S") then
+      if region_start == nil then
+        region_start = i
+      end
+      region_end = i
+    elseif region_start ~= nil then
+      -- Empty line after code started - include it in the region
+      region_end = i
+    end
+  end
+  
+  -- If no code found, return nil
+  if region_start == nil then
+    return nil
+  end
+  
+  -- Get the code content
+  local code_lines = vim.api.nvim_buf_get_lines(bufnr, region_start, region_end + 1, false)
+  local code = table.concat(code_lines, "\n")
+  
+  return {
+    start_line = region_start,
+    end_line = region_end,
+    code = code,
+    line_count = region_end - region_start + 1,
+  }
+end
+
+---Find an @ai: comment in the buffer by its text content
+---Used to re-locate comments after buffer modifications (line shifts)
+---@param bufnr number
+---@param comment_text string The exact comment line text to find
+---@return ParsedComment? parsed comment with current line number, nil if not found
+function M.find_comment_by_text(bufnr, comment_text)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local trimmed_target = vim.trim(comment_text)
+  
+  for i = 0, line_count - 1 do
+    local lines = vim.api.nvim_buf_get_lines(bufnr, i, i + 1, false)
+    if #lines > 0 and vim.trim(lines[1]) == trimmed_target then
+      -- Found the line, parse it to get full info
+      return M.parse_line(bufnr, i)
+    end
+  end
+  
+  return nil
 end
 
 return M

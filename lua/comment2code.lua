@@ -54,11 +54,24 @@ function M.disable()
   vim.notify("[comment2code] Disabled", vim.log.levels.INFO)
 end
 
+---Set the activation mode
+---@param mode Comment2CodeMode "manual", "auto_linear", or "auto_nonlinear"
+function M.set_mode(mode)
+  autocmd.set_mode(mode)
+end
+
+---Get the current activation mode
+---@return Comment2CodeMode
+function M.get_mode()
+  return autocmd.get_mode()
+end
+
 ---Get current status
 ---@return table
 function M.status()
   return {
     enabled = config.values.enabled,
+    mode = config.values.mode,
     processing_count = state.get_processing_count(),
     processed_count = vim.tbl_count(state.processed),
   }

@@ -1,9 +1,11 @@
+---@alias Comment2CodeMode "manual"|"auto_linear"|"auto_nonlinear"
+
 ---@class Comment2CodeConfig
 ---@field enabled boolean Enable/disable the plugin
 ---@field opencode_path string Path to opencode CLI
 ---@field model string|nil Model to use (e.g., "anthropic/claude-sonnet-4-5", "openai/gpt-4o")
 ---@field trigger_pattern string Pattern to detect AI comments
----@field auto_trigger boolean Automatically process comments
+---@field mode Comment2CodeMode Activation mode: manual, auto_linear, auto_nonlinear
 ---@field debounce_ms number Debounce time in milliseconds
 ---@field notify boolean Show notifications
 ---@field insert_below boolean Insert code below comment (vs replace)
@@ -11,7 +13,8 @@
 ---@field comment_patterns table<string, string> Filetype to comment pattern mapping
 
 ---@class Comment2CodeKeymaps
----@field manual_trigger string Keymap to manually trigger generation
+---@field manual_trigger string Keymap to manually trigger generation on current line
+---@field process_all string Keymap to process all @ai: comments in buffer
 
 ---@type Comment2CodeConfig
 local defaults = {
@@ -19,12 +22,13 @@ local defaults = {
   opencode_path = "opencode",
   model = "opencode/big-pickle", -- default model
   trigger_pattern = "@ai:",
-  auto_trigger = true,
+  mode = "auto_nonlinear", -- "manual", "auto_linear", "auto_nonlinear"
   debounce_ms = 500,
   notify = true,
   insert_below = true,
   keymaps = {
     manual_trigger = "<leader>ai",
+    process_all = "<leader>aA",
   },
   -- Comment patterns for different filetypes (Lua patterns)
   comment_patterns = {
@@ -79,7 +83,19 @@ M.values = vim.deepcopy(defaults)
 
 ---@param opts Comment2CodeConfig?
 function M.setup(opts)
-  M.values = vim.tbl_deep_extend("force", defaults, opts or {})
+  opts = opts or {}
+
+  -- Backward compatibility: map old auto_trigger to new mode system
+  if opts.auto_trigger ~= nil and opts.mode == nil then
+    if opts.auto_trigger then
+      opts.mode = "auto_nonlinear"
+    else
+      opts.mode = "manual"
+    end
+    opts.auto_trigger = nil
+  end
+
+  M.values = vim.tbl_deep_extend("force", defaults, opts)
 end
 
 ---@return Comment2CodeConfig

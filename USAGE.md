@@ -32,7 +32,7 @@
 
 ✅ Force immediate generation:
    - Place cursor on the `@ai:` line
-   - Press `<space>ai`
+   - Press `<leader>ai` (default keymap)
 
 ## Quick Test
 

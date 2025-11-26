@@ -60,6 +60,19 @@ end
 ---@param old_end number Previous code end line
 ---@return number start_line, number end_line
 function M.replace_code(bufnr, line_num, code, indent, old_start, old_end)
+  -- Validate that old_start <= old_end (can happen if buffer was modified and extmarks are stale)
+  if old_start > old_end then
+    -- Fallback to insert mode if the region is invalid
+    return M.insert_code(bufnr, line_num, code, indent)
+  end
+  
+  -- Validate that the region is within buffer bounds
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  if old_start >= line_count or old_end >= line_count then
+    -- Region is out of bounds, fallback to insert
+    return M.insert_code(bufnr, line_num, code, indent)
+  end
+  
   -- Remove old extmarks
   M.clear_region_marks(bufnr, old_start, old_end)
   
@@ -166,7 +179,11 @@ function M.get_generated_region(bufnr, comment_line)
     local start_row = mark[2]
     local details = mark[4]
     local end_row = details.end_row or start_row
-    return start_row, end_row
+    
+    -- Validate the region is still valid (can become invalid if buffer was edited)
+    if start_row <= end_row then
+      return start_row, end_row
+    end
   end
   
   return nil, nil

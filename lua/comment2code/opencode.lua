@@ -3,7 +3,7 @@ local state = require("comment2code.state")
 
 local M = {}
 
----Build the context prompt with file information
+---Build the context prompt for code generation
 ---@param bufnr number
 ---@param line_num number
 ---@param prompt string
@@ -11,38 +11,88 @@ local M = {}
 function M.build_prompt(bufnr, line_num, prompt)
   local filetype = vim.bo[bufnr].filetype
   local filename = vim.api.nvim_buf_get_name(bufnr)
-  
-  -- Get surrounding context (10 lines before, 5 after)
+
+  -- Get more surrounding context (20 lines before, 10 after) for better understanding
   local line_count = vim.api.nvim_buf_line_count(bufnr)
-  local context_start = math.max(0, line_num - 10)
-  local context_end = math.min(line_count, line_num + 5)
+  local context_start = math.max(0, line_num - 20)
+  local context_end = math.min(line_count, line_num + 10)
   local context_lines = vim.api.nvim_buf_get_lines(bufnr, context_start, context_end, false)
   local context = table.concat(context_lines, "\n")
-  
+
   local full_prompt = string.format(
-    [[You are a code generator. Generate ONLY code, no explanations or markdown.
+    [[You are a precise code generator. Output ONLY executable code, nothing else.
 
-File: %s
-Language: %s
-Context around line %d:
-```
+FILE: %s (%s)
+LINE: %d
+
+CONTEXT:
 %s
-```
 
-Task: %s
+TASK: %s
 
-Requirements:
-- Output ONLY the code, no markdown code blocks, no explanations
-- Match the indentation style of the surrounding code
-- Keep it concise and functional
-- Do not include the original comment in your output]],
+RULES:
+1. Output ONLY the code - no comments, no explanations, no markdown fences
+2. Do NOT repeat or include the @ai: comment line in your output
+3. Do NOT include any comment that describes what the code does
+4. Start directly with the implementation code
+5. Match the coding style from the context
+6. Keep it minimal and focused]],
     filename ~= "" and filename or "untitled",
     filetype ~= "" and filetype or "text",
     line_num + 1,
     context,
     prompt
   )
-  
+
+  return full_prompt
+end
+
+---Build the prompt for refactoring existing code
+---@param bufnr number
+---@param line_num number
+---@param prompt string
+---@param existing_code string
+---@return string
+function M.build_refactor_prompt(bufnr, line_num, prompt, existing_code)
+  local filetype = vim.bo[bufnr].filetype
+  local filename = vim.api.nvim_buf_get_name(bufnr)
+
+  -- Get surrounding context for better understanding
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local context_start = math.max(0, line_num - 20)
+  local context_end = math.min(line_count, line_num + 30)
+  local context_lines = vim.api.nvim_buf_get_lines(bufnr, context_start, context_end, false)
+  local context = table.concat(context_lines, "\n")
+
+  local full_prompt = string.format(
+    [[You are a precise code refactoring assistant. Output ONLY the refactored code, nothing else.
+
+FILE: %s (%s)
+LINE: %d
+
+SURROUNDING CONTEXT:
+%s
+
+CODE TO REFACTOR:
+%s
+
+INSTRUCTION: %s
+
+RULES:
+1. Output ONLY the refactored code - no comments, no explanations, no markdown fences
+2. Do NOT include the @ai: comment line in your output
+3. Do NOT add any comments explaining the changes
+4. Preserve the original functionality unless the instruction says otherwise
+5. Match the existing coding style
+6. Output the complete refactored code that will replace the original]],
+    filename ~= "" and filename or "untitled",
+    filetype ~= "" and filetype or "text",
+    line_num + 1,
+    context,
+    existing_code,
+    prompt
+  )
+
   return full_prompt
 end
 
@@ -136,15 +186,52 @@ end
 function M.clean_output(output)
   local result = output
   
-  -- Remove markdown code blocks if present
-  result = result:gsub("^```[%w]*\n", "")
-  result = result:gsub("\n```%s*$", "")
-  result = result:gsub("^```[%w]*", "")
-  result = result:gsub("```%s*$", "")
-  
-  -- Trim leading/trailing whitespace but preserve internal structure
+  -- Trim leading/trailing whitespace first
   result = result:gsub("^%s+", "")
   result = result:gsub("%s+$", "")
+  
+  -- Check if the entire output is wrapped in a code block
+  -- Pattern: ```language\n...\n``` (greedy match to get the first complete block)
+  local code_block_pattern = "^```[%w%-_]*\n(.-)```"
+  local extracted = result:match(code_block_pattern)
+  
+  if extracted then
+    -- Use only the first code block content
+    result = extracted
+  else
+    -- Try pattern without initial newline: ```language ...```
+    extracted = result:match("^```[%w%-_]*%s*(.-)```")
+    if extracted then
+      result = extracted
+    end
+  end
+  
+  -- If there are still code fences in the middle (multiple blocks), take content before them
+  -- This handles cases where model returns code + explanation + more code
+  local first_fence = result:find("\n```")
+  if first_fence then
+    result = result:sub(1, first_fence - 1)
+  end
+  
+  -- Remove any remaining ``` markers that might be at the start/end
+  result = result:gsub("^```[%w%-_]*%s*", "")
+  result = result:gsub("%s*```%s*$", "")
+  
+  -- Remove any @ai: comment lines that the model might have included
+  -- Handle various comment styles: //, #, --, ;, ", etc.
+  local lines = vim.split(result, "\n", { plain = true })
+  local filtered_lines = {}
+  for _, line in ipairs(lines) do
+    -- Skip lines that contain @ai: pattern (the trigger comment)
+    if not line:match("@ai:") then
+      table.insert(filtered_lines, line)
+    end
+  end
+  result = table.concat(filtered_lines, "\n")
+  
+  -- Final trim
+  result = result:gsub("^%s*\n", "")
+  result = result:gsub("\n%s*$", "")
   
   return result
 end

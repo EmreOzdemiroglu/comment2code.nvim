@@ -1,22 +1,23 @@
 # comment2code.nvim
 
-Generate code from AI comments using [opencode-cli](https://opencode.ai/).
+Generate code from AI comments using [OpenCode](https://github.com/sst/opencode).
 
-Write a comment like `// @ai: create a function to calculate fibonacci` and watch as the code appears below it automatically!
+Inspired by [ThePrimeagen's](https://github.com/theprimeagen) workflow - write a comment like `// @ai: create a function to calculate fibonacci` and watch as the code appears below it automatically!
 
 ## Features
 
 - **Automatic Code Generation**: Write `@ai:` comments and code generates automatically
+- **Code Refactoring**: Refactor existing code by adding an `@ai:` comment above it
 - **Multi-Language Support**: Works with 30+ languages (Lua, Python, JavaScript, TypeScript, Rust, Go, etc.)
 - **Smart Deduplication**: Won't regenerate code that already exists
-- **Parallel Processing**: Handle multiple AI comments simultaneously
+- **Sequential Processing**: Process multiple comments safely - code always inserts at the correct position
 - **Manual Re-trigger**: Force regeneration with a keymap
 - **Non-blocking**: Async execution keeps your editor responsive
 
 ## Requirements
 
 - Neovim 0.10+ (for `vim.system`)
-- [opencode-cli](https://opencode.ai/) installed and configured
+- [OpenCode CLI](https://github.com/sst/opencode) installed and configured
 
 ## Installation
 
@@ -24,7 +25,7 @@ Write a comment like `// @ai: create a function to calculate fibonacci` and watc
 
 ```lua
 {
-  "yourusername/comment2code.nvim",
+  "EmreOzdemiroglu/comment2code.nvim",
   config = function()
     require("comment2code").setup()
   end,
@@ -35,11 +36,20 @@ Write a comment like `// @ai: create a function to calculate fibonacci` and watc
 
 ```lua
 use {
-  "yourusername/comment2code.nvim",
+  "EmreOzdemiroglu/comment2code.nvim",
   config = function()
     require("comment2code").setup()
   end,
 }
+```
+
+### Using [vim-plug](https://github.com/junegunn/vim-plug)
+
+```vim
+Plug 'EmreOzdemiroglu/comment2code.nvim'
+
+" In your init.lua or after plugin loads:
+lua require("comment2code").setup()
 ```
 
 ## Usage
@@ -63,14 +73,53 @@ Write a comment with `@ai:` followed by your prompt:
 **How it works:**
 1. Write your `@ai:` comment in INSERT mode
 2. Press `ESC` to enter NORMAL mode
-3. Wait 500ms (debounce time)
+3. Move cursor away from the comment line (or wait for debounce)
 4. Code automatically generates below the comment!
 
 ### Manual Trigger
 
-If you want to regenerate code for a comment:
+To generate or regenerate code for a comment:
 1. Place your cursor on the comment line
 2. Press `<leader>ai` (or your configured keymap)
+
+### Process All Comments
+
+To process all `@ai:` comments in the current buffer:
+1. Press `<leader>aA` (or your configured keymap)
+2. Comments are processed sequentially from top to bottom
+3. Each comment's code is inserted at the correct position
+
+### Refactoring Existing Code
+
+You can use `@ai:` comments to refactor existing code:
+
+1. Add an `@ai:` comment **above** the code you want to refactor
+2. The code region extends until the next `@ai:` comment or end of file
+3. Press `<leader>ai` to trigger refactoring
+
+```python
+# @ai: optimize this function for better performance
+def slow_function(items):
+    result = []
+    for item in items:
+        if item not in result:
+            result.append(item)
+    return result
+
+# @ai: next comment starts here, so the region above will be refactored
+```
+
+When you press `<leader>ai` on the first comment, the plugin will:
+- Detect the code below (until the next `@ai:` comment)
+- Send it to the AI with your refactoring instruction
+- Replace the original code with the refactored version
+
+### Keymaps
+
+| Keymap | Description |
+|--------|-------------|
+| `<leader>ai` | Generate/regenerate code from @ai: comment on current line |
+| `<leader>aA` | Process all @ai: comments in buffer (sequentially) |
 
 ### Commands
 
@@ -82,8 +131,26 @@ If you want to regenerate code for a comment:
 | `:Comment2CodeEnable` | Enable plugin |
 | `:Comment2CodeDisable` | Disable plugin |
 | `:Comment2CodeStatus` | Show current status |
+| `:Comment2CodeMode [mode]` | Get/set activation mode |
 | `:Comment2CodeCancel` | Cancel all running jobs |
 | `:Comment2CodeReset` | Reset plugin state |
+
+### Activation Modes
+
+The plugin supports three activation modes:
+
+| Mode | Description |
+|------|-------------|
+| `manual` | Only triggers via `<leader>ai` keymap or `:Comment2Code` command |
+| `auto_linear` | Triggers the previous @ai: comment when you start writing a new one |
+| `auto_nonlinear` | Triggers when cursor moves away from the @ai: comment line (default) |
+
+Change mode at runtime:
+```vim
+:Comment2CodeMode manual
+:Comment2CodeMode auto_linear
+:Comment2CodeMode auto_nonlinear
+```
 
 ## Configuration
 
@@ -96,15 +163,13 @@ require("comment2code").setup({
   opencode_path = "opencode",
   
   -- Model to use (provider/model format)
-  -- Default: "opencode/big-pickle"
-  -- Examples: "anthropic/claude-sonnet-4-5", "openai/gpt-4o", "github-copilot/gpt-4o"
-  model = "opencode/big-pickle",
+  model = "anthropic/claude-sonnet-4-20250514",
   
   -- Pattern to detect AI comments
   trigger_pattern = "@ai:",
   
-  -- Automatically process comments as you type
-  auto_trigger = true,
+  -- Activation mode: "manual", "auto_linear", or "auto_nonlinear"
+  mode = "auto_nonlinear",
   
   -- Debounce time in milliseconds (prevents excessive API calls)
   debounce_ms = 500,
@@ -112,23 +177,21 @@ require("comment2code").setup({
   -- Show notifications
   notify = true,
   
-  -- Keymaps
+  -- Keymaps (set to false to disable)
   keymaps = {
-    manual_trigger = "<leader>ai", -- Set to false to disable
+    manual_trigger = "<leader>ai",
+    process_all = "<leader>aA",
   },
 })
 ```
 
 ### Available Models
 
-You can use any model supported by opencode:
+You can use any model supported by OpenCode:
 
 ```lua
--- OpenCode (default)
-model = "opencode/big-pickle"
-
 -- Anthropic
-model = "anthropic/claude-sonnet-4-5"
+model = "anthropic/claude-sonnet-4-20250514"
 model = "anthropic/claude-opus-4"
 
 -- OpenAI  
@@ -142,22 +205,26 @@ model = "github-copilot/gpt-4o"
 ## How It Works
 
 1. **Detection**: The plugin monitors text changes and detects `@ai:` comments
-2. **Deduplication**: Each comment is hashed (buffer + line + content) to prevent duplicate processing
-3. **Context Building**: Surrounding code is sent to opencode for better context
-4. **Async Execution**: `opencode run` runs asynchronously
-5. **Code Insertion**: Generated code is inserted below the comment with matching indentation
-6. **Tracking**: Processed comments are tracked to avoid regeneration
+2. **Queuing**: Multiple triggers are queued and processed sequentially
+3. **Smart Re-finding**: Comments are located by text content (not line number) to handle line shifts
+4. **Context Building**: Surrounding code is sent to OpenCode for better context
+5. **Async Execution**: `opencode run` executes asynchronously
+6. **Code Insertion**: Generated code is inserted below the comment with matching indentation
+7. **Tracking**: Processed comments are tracked to avoid regeneration
 
-### Deduplication Strategy
+### Sequential Processing
 
-The plugin uses a hash-based system to track processed comments:
-- Hash = `buffer_id:line_number:trimmed_comment_text`
-- Prevents automatic re-processing of the same comment
-- Manual trigger (`<leader>ai`) bypasses this check for force regeneration
+When you trigger multiple comments (via `<leader>ai` repeatedly or `<leader>aA`), the plugin:
+1. Queues all requests
+2. Processes them one at a time
+3. Re-finds each comment by its text content before inserting code
+4. This ensures code always inserts at the correct position, even after previous insertions shift line numbers
 
 ### Smart Code Detection
 
-If there's already code below a comment, the plugin won't overwrite it automatically. Use manual trigger to force regeneration.
+- If there's already code below a comment, the plugin won't overwrite it automatically
+- Use `<leader>ai` to force regeneration or trigger refactoring mode
+- The plugin strips markdown code fences and `@ai:` comments from AI output
 
 ## Supported Languages
 
@@ -170,6 +237,8 @@ The plugin supports comment syntax for:
 | JavaScript, TypeScript, C, C++, Rust, Go, Java | `// @ai:` |
 | Vim | `" @ai:` |
 | Lisp, Clojure | `; @ai:` |
+| HTML, XML | `<!-- @ai: -->` |
+| CSS | `/* @ai: */` |
 
 ## License
 
@@ -178,3 +247,8 @@ MIT
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Credits
+
+- [OpenCode](https://github.com/sst/opencode) - The AI CLI tool that powers code generation
+- [ThePrimeagen](https://github.com/theprimeagen) - Inspiration for the workflow
